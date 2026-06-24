@@ -183,6 +183,41 @@ and `glGetError()` returns 0 (poll it or enable `KHR_debug`).
       classpath root (`res/img/x.png` → `img/x.png`). **The AWT
       `ImageIO`/`BufferedImage` PNG decode is unchanged** — STB decode
       remains the 1.6 task. Sound OGG loading is also still 1.6.
+- [x] **1.6** — STB resource loading + real audio. `./gradlew clean
+      build` passes; **runtime-verified on macOS (Apple Silicon)** —
+      all 14 OGG clips load via STB vorbis + OpenAL and play (theme1
+      loops at startup; gun/walk/hit/door/waterfall during gameplay);
+      all 51 PNG textures load via `stbi_load_from_memory`; zero GL/AL
+      errors; no `java.awt` imports remain in `Texture.java`.
+      `Texture.java`: AWT `ImageIO`/`BufferedImage` decode replaced
+      with `STBImage.stbi_load_from_memory` (RGBA) in both `load()` and
+      `loadFont()`; `MemoryStack` for w/h/channels out-params;
+      `stbi_image_free` + `MemoryUtil.memFree` for the encoded buffer;
+      the per-glyph atlas slicer in `loadFont` now reads from the STB
+      RGBA `ByteBuffer` directly (no `BufferedImage.getRGB`); dropped
+      the deprecated `org.lwjgl.BufferUtils.createByteBuffer` in favor
+      of `MemoryUtil.memAlloc`. `Texture.java` is now fully AWT-free.
+      Audio: new `sound/OpenALAudio.java` implements `Audio` — one
+      OpenAL buffer + a 4-source pool (round-robin so overlapping
+      gunshots/footsteps don't cut each other off).
+      `playAsSoundEffect`/`isPlaying`/`stop`/`dispose`.
+      `Sound.loadAll()` decodes each `sounds/*.ogg` from the classpath
+      via `stb_vorbis_decode_memory` → `ShortBuffer` PCM →
+      `alBufferData` (mono16/stereo16 by channel count) →
+      `OpenALAudio`; falls back to `NoOpAudio` per-clip on decode
+      failure. `Sound.dispose()` frees all buffers + sources.
+      `Game.initAL()`: added `ALC.createCapabilities(device)` +
+      `AL.createCapabilities(alcCaps)` after making the context
+      current (was missing — LWJGL3 requires this before any `AL10.*`
+      call; surfaced as `No ALCapabilities instance has been set`).
+      `Game.run()` shutdown: `Sound.dispose()` before `destroyAL()`.
+      `NoOpAudio` kept as the per-clip fallback when the AL device
+      can't open or a sound file fails to decode.
+      **Font: AWT atlas kept** (user decision) — the glyph atlas
+      `NeoFont.png` still loads through `Texture.loadFont`, which is
+      now STB-decoded, so the font path is AWT-free at the *decode*
+      layer; the atlas itself is a rasterized PNG, not a live TTF.
+      **STB-truetype switch deferred** — see §11.
 
 ---
 
@@ -243,43 +278,31 @@ slice of 1.6 (classpath loading for shaders + textures, AWT decode kept)
 was pulled forward to make verification possible — see 1.6 for what
 remains.
 
-### 1.6 — STB resource loading + real audio
+### 1.6 — STB resource loading + real audio  *(DONE — see checklist §4)*
 
-- **`Texture.java`** — replace `java.awt.image.BufferedImage`/`ImageIO`
-  PNG decode with `stbi_load_from_memory`. Replace the
-  `org.lwjgl.BufferUtils.createByteBuffer` call at line ~139 with
-  `MemoryStack`/`MemoryUtil` (the legacy `org.lwjgl.BufferUtils` still
-  ships in LWJGL 3 and compiles, but it's deprecated). **Note: the
-  classpath *path* fix is already done in 1.5** (`Texture.load`/`loadFont`
-  read via `getResourceAsStream`, stripping the `res/` prefix); only the
-  *decoder* (AWT → STB) remains here.
-- **`Sound.java` + a real `Audio` impl** — load OGG via
-  `stb_vorbis_decode_memory` → OpenAL buffer → source playback
-  (`alGenSources`/`alGenBuffers`/`alSourcePlay`). Replace the
-  `NoOpAudio` stub assigned to all 15 static `Sound` fields. Sound files
-  also need classpath loading (same pattern as textures/shaders).
-- **Classpath resource loading** — **mostly done in 1.5** for shaders
-  (`FileUtils.loadAsString`) and textures (`Texture.load`/`loadFont`).
-  Remaining: sound files in `Sound.java` still open via relative
-  `FileInputStream`; convert those too. `config.json` is also still
-  CWD-relative (`Util.loadConfig`/`saveConfig` use `Path.of("config.json")`);
-  optionally move it to classpath or `~/.blitz/` for fat-jar cleanliness.
-- **`Font.java`** —
-  - **OPEN QUESTION (TBD — confirm with user):** keep the existing AWT
-    glyph atlas (resource path already fixed in 1.5) or switch to
-    STB-truetype for a fully AWT-free stack?
-- After this step the game should have sound and load cleanly from the
-  fat jar.
+Completed and runtime-verified on macOS (Apple Silicon). Full changelog
+in §4, entry 1.6. STB PNG decode (`stbi_load_from_memory`) replaces
+AWT `ImageIO` in `Texture.java`; STB vorbis (`stb_vorbis_decode_memory`)
++ OpenAL buffers/sources replace the `NoOpAudio` stubs in
+`Sound.java`; new `OpenALAudio` clip with a 4-source pool;
+`AL.createCapabilities` added to `Game.initAL`; `Sound.dispose()` wired
+into shutdown. Audio plays (theme1 loops, SFX trigger in gameplay);
+`Texture.java` is AWT-free. The AWT glyph atlas is kept; the
+STB-truetype font switch is deferred (§11).
 
 ### 1.7 — Verification gate
 
 - `./gradlew clean build` is clean.
 - Run the game end-to-end: launcher → menu → level → shoot enemies →
   death/ending → ESC exits cleanly. Audio plays. No GL errors.
-  - **macOS (Apple Silicon) verified through 1.5:** the game window
-    opens, the 3.3-core/4.1-Metal context is current, all 1.4 shaders
-    compile/link, and the loop runs with zero GL errors. Full
-    end-to-end (audio + gameplay) still pending 1.6.
+  - **macOS (Apple Silicon) verified through 1.6:** launcher opens,
+    game window opens, 1.4 shaders render on a 4.1 Metal core context,
+    all 14 OGG clips load via STB vorbis + OpenAL and play (theme1
+    loops at startup, SFX during gameplay), all 51 PNG textures load
+    via STB. Zero GL/AL errors. Remaining: full interactive gameplay
+    pass (the loop runs unattended for ~20s without crashing; a human
+    playthrough to confirm every SFX trigger + the ending flow is the
+    final gate).
 - `./gradlew shadowJar` produces a fat jar that runs standalone with
   natives extracted (verify on a clean machine / fresh JDK 21). Note:
   the fat jar currently does not extract/locate LWJGL natives when
@@ -311,14 +334,13 @@ remains.
   "unmappable character for encoding UTF-8". **Fixed in 1.3** — but if
   compile fails on a non-UTF-8 byte elsewhere, scan with:
   `python3 -c "import io; ..."` over `src/main/java` for bytes > 127.
-- `Texture.java:139` uses `org.lwjgl.BufferUtils.createByteBuffer`
-  (LWJGL 3 still ships `org.lwjgl.BufferUtils` as legacy compat, so it
-  compiles). Replace with `MemoryStack`/`MemoryUtil` in 1.6.
-- `Texture.java` uses `java.awt.image.BufferedImage`/`ImageIO` for PNG
-  decode — the *path* (classpath) is fixed in 1.5; the *decoder* (AWT →
-  STB) remains for 1.6.
-- Audio is a **no-op stub**; the game runs silent until 1.6.
-  `Sound.java` assigns `NoOpAudio` instances to all 15 static fields.
+- `Texture.java` previously used `org.lwjgl.BufferUtils.createByteBuffer`
+  and `java.awt.image.BufferedImage`/`ImageIO` for PNG decode —
+  **both replaced in 1.6** with `MemoryUtil`/`MemoryStack` and
+  `stbi_load_from_memory`. `Texture.java` is now AWT-free.
+- Audio was a **no-op stub** through 1.5 — **real audio landed in 1.6**
+  (STB vorbis → OpenAL). `NoOpAudio` is retained only as the per-clip
+  fallback when the AL device can't open or a file fails to decode.
 - Shaders were `#version 120` with GL 2.1 draw calls — **fixed in 1.4**
   and **runtime-verified in 1.5** on macOS (4.1 Metal core context, no
   GL errors).
@@ -350,16 +372,17 @@ remains.
 | `src/main/java/com/honor/blitzremake/graphics/Shader.java` | GLSL program wrapper (uses `glUniformMatrix4fv`) |
 | `src/main/java/com/honor/blitzremake/graphics/VertexArray.java` | VAO-backed mesh (VAOs activated in 1.4); `bind`=`glBindVertexArray` |
 | `src/main/java/com/honor/blitzremake/graphics/ShaderUtils.java` | GLSL program loader (link-status check + throw-on-failure added in 1.4) |
-| `src/main/java/com/honor/blitzremake/graphics/Texture.java` | Classpath PNG load (1.5); STB decode still TODO 1.6 |
+| `src/main/java/com/honor/blitzremake/graphics/Texture.java` | STB PNG decode + classpath load (1.6); AWT-free |
 | `src/main/java/com/honor/blitzremake/input/Input.java` | GLFW-callback-fed static facade + `Input.Mouse` shim |
 | `src/main/java/com/honor/blitzremake/util/MyDisplay.java` | Thin wrapper over `Window.init` |
 | `src/main/java/com/honor/blitzremake/util/Util.java` | `setBlankCursor` + Gson `loadConfig`/`saveConfig` (1.5) |
 | `src/main/java/com/honor/blitzremake/util/Config.java` | `record Config(boolean windowed, int width, int height)` (new 1.5) |
 | `src/main/java/com/honor/blitzremake/util/FileUtils.java` | Classpath shader loader (1.5) |
 | `src/main/java/com/honor/blitzremake/sound/Audio.java` | Audio interface |
-| `src/main/java/com/honor/blitzremake/sound/NoOpAudio.java` | No-op stub (replaced in 1.6) |
-| `src/main/java/com/honor/blitzremake/sound/Sound.java` | 15 static fields, currently all `NoOpAudio` |
-| `src/main/java/com/honor/blitzremake/font/Font.java` | Glyph atlas; resource path fixed in 1.5 |
+| `src/main/java/com/honor/blitzremake/sound/NoOpAudio.java` | No-op fallback (retained; used when AL device open fails) |
+| `src/main/java/com/honor/blitzremake/sound/OpenALAudio.java` | `Audio` impl: OpenAL buffer + 4-source pool (new 1.6) |
+| `src/main/java/com/honor/blitzremake/sound/Sound.java` | 14 clips: STB vorbis → OpenAL (1.6); `dispose()` |
+| `src/main/java/com/honor/blitzremake/font/Font.java` | Glyph atlas; AWT atlas kept (1.6); STB-truetype deferred (§11) |
 | `src/main/java/com/honor/launcher/Launcher.java` | GLFW immediate-mode UI (rewritten 1.5); returns `Config` |
 | `src/main/resources/shaders/` | 22 `.vs`/`.fs` files, `#version 330 core` (1.4) |
 
@@ -368,7 +391,8 @@ remains.
 ## 9. Current commit graph (dev branch)
 
 ```
-(1.5 uncommitted — working tree)   ← GLFW launcher + JSON config + threading fix
+(1.6 uncommitted — working tree)   ← STB PNG decode + STB vorbis/OpenAL audio
+933da10 GLFW launcher + JSON config (Gson) + main-thread loop   ← 1.5
 41bd5d2 Port GL 2.1 → 3.3 core (shaders, VAOs, link validation)   ← 1.4
 0a78a35 Port platform layer to GLFW + LWJGL 3 OpenAL
 441753b build: add Gradle (Kotlin DSL) + LWJGL 3 + JOML toolchain
@@ -388,8 +412,33 @@ All commits authored by `Horbee <n.horox@gmail.com>`.
 
 1. ~~**JSON config parser in 1.5**~~ — **RESOLVED: Gson** (user decision,
    1.5). `com.google.code.gson:gson:2.11.0` added.
-2. **Font in 1.6** — keep the existing AWT glyph atlas (resource path
-   already fixed in 1.5) or switch to STB-truetype for a fully AWT-free
-   stack? **Ask the user before starting 1.6.**
+2. ~~**Font in 1.6**~~ — **RESOLVED: keep AWT atlas** (user decision,
+   1.6). STB-truetype switch deferred to a future polish step (§11).
 
-This is flagged inline in section 5.1.6 as well.
+---
+
+## 11. Deferred / future polish (not in the Step 1 / Step 2 plan)
+
+- **STB-truetype font switch** — the current `Font` uses a rasterized
+  glyph atlas (`NeoFont.png`, 40 chars: `0-9A-Z:!? `) loaded through
+  `Texture.loadFont` (which is now STB-decoded, so AWT is already gone
+  from the *decode* layer). A future step could switch to a live `.ttf`
+  baked via `stbtt_BakeFontBitmap` into a packed atlas texture:
+  - **Benefits:** adds lowercase + accented glyphs (the launcher UI is
+    currently forced uppercase because the atlas has no lowercase);
+    dynamic sizing without re-exporting a sprite sheet; matches the
+    modern-LWJGL3 stack.
+  - **Work:** source/commit a `.ttf` (likely the original freeware pixel
+    font); rewrite `Font` to bake one packed atlas + sample UVs (changes
+    the per-glyph `glBindTexture` draw loop in `Font.drawString` and the
+    `font.vs`/`font.fs` shaders, which currently assume one texture per
+    glyph); preserve the existing visual at 32px.
+  - **When:** optional, can be done any time after Step 1 without
+    blockers. Suggested as a Step-2 polish or a dedicated 1.8.
+- **`config.json` location** — currently CWD-relative (`Util.saveConfig`
+  writes to `Path.of("config.json")`). Move to `~/.blitz/` or a
+  platform-appropriate user-config dir for fat-jar cleanliness.
+- **Fat-jar native extraction** — `./gradlew run` works; `java -jar`
+  on the shadow jar does not locate LWJGL natives. Add LWJGL's
+  `SharedLibraryLoader` extraction path or bundle natives beside the
+  jar if standalone `java -jar` is a hard requirement.

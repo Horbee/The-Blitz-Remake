@@ -97,6 +97,9 @@ public class Game {
 		}
 		alContextHandle = ctx;
 		alcMakeContextCurrent(ctx);
+		// Bind LWJGL 3's OpenAL function loader for the current context.
+		org.lwjgl.openal.ALCCapabilities alcCaps = org.lwjgl.openal.ALC.createCapabilities(device);
+		org.lwjgl.openal.AL.createCapabilities(alcCaps);
 	}
 
 	private void destroyAL() {
@@ -225,6 +228,7 @@ public class Game {
 		}
 
 		Input.dispose();
+		Sound.dispose();
 		Window.destroy();
 		destroyAL();
 	}
