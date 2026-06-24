@@ -4,10 +4,9 @@ out/
 bin/
 .gradle/
 
-# --- Gradle wrapper binaries (the small jar inside the wrapper) ---
-# Keep gradlew/gradlew.bat and gradle-wrapper.properties, but ignore the
-# wrapper jar so we regenerate it consistently.
-gradle/wrapper/gradle-wrapper.jar
+# --- Gradle wrapper is committed (gradlew, gradlew.bat, gradle-wrapper.jar,
+# gradle-wrapper.properties) so the project builds from a clean clone with no
+# system Gradle installed. Do not ignore it. ---
 
 # --- JVM crash logs ---
 hs_err_pid*
