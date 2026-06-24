@@ -3,11 +3,12 @@ package com.honor.blitzremake.graphics;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL15.*;
 import static org.lwjgl.opengl.GL20.*;
+import static org.lwjgl.opengl.GL30.*;
 import com.honor.blitzremake.util.BufferUtils;
 
 public class VertexArray {
 
-	// private int vao;
+	private int vao;
 	private int vbo, ibo, tbo;
 	private int count;
 
@@ -35,8 +36,8 @@ public class VertexArray {
 	private void create(float[] vertices, byte[] indices, float[] textureCoordinates) {
 		count = indices.length;
 
-		// vao = glGenVertexArrays();
-		// glBindVertexArray(vao);
+		vao = glGenVertexArrays();
+		glBindVertexArray(vao);
 
 		vbo = glGenBuffers();
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -54,25 +55,14 @@ public class VertexArray {
 		glVertexAttribPointer(Shader.TEXTURE_ATTRIB, 2, GL_FLOAT, false, 0, 0);
 		glEnableVertexAttribArray(Shader.TEXTURE_ATTRIB);
 
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		glBindVertexArray(0);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		// glBindVertexArray(0);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
 	}
 
 	public void bind(Shader shader) {
-
-		glEnableVertexAttribArray(shader.getAttribLocation("position"));
-		glEnableVertexAttribArray(shader.getAttribLocation("tc"));
-
-		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glVertexAttribPointer(shader.getAttribLocation("position"), 3, GL_FLOAT, false, 0, 0);
-
-		glBindBuffer(GL_ARRAY_BUFFER, tbo);
-		glVertexAttribPointer(shader.getAttribLocation("tc"), 2, GL_FLOAT, false, 0, 0);
-
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-
+		glBindVertexArray(vao);
 	}
 
 	public void draw() {
@@ -80,10 +70,7 @@ public class VertexArray {
 	}
 
 	public void unbind(Shader shader) {
-		glDisableVertexAttribArray(shader.getAttribLocation("position"));
-		glDisableVertexAttribArray(shader.getAttribLocation("tc"));
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		glBindVertexArray(0);
 	}
 
 	public void render(Shader shader) {
@@ -92,19 +79,11 @@ public class VertexArray {
 	}
 
 	public void bindParticle(Shader shader) {
-		glEnableVertexAttribArray(shader.getAttribLocation("position"));
-
-		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glVertexAttribPointer(shader.getAttribLocation("position"), 3, GL_FLOAT, false, 0, 0);
-
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+		glBindVertexArray(vao);
 	}
-	
+
 	public void bindLightMesh(Shader shader) {
-		glEnableVertexAttribArray(shader.getAttribLocation("position"));	
-		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glVertexAttribPointer(shader.getAttribLocation("position"), 3, GL_FLOAT, false, 0, 0);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+		glBindVertexArray(vao);
 	}
 
 

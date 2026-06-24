@@ -24,7 +24,14 @@ java {
 application {
     mainClass = "com.honor.launcher.Launcher"
     // Allow LWJGL to use jemalloc for native memory allocation if present.
-    applicationDefaultJvmArgs = listOf("-Dorg.lwjgl.system.allocator=jemalloc")
+    // -XstartOnFirstThread is required by GLFW on macOS (Cocoa main-thread
+    // rule); harmless on Linux/Windows. The game's worker-thread model means
+    // full runtime verification must happen on Linux/Windows (see todo 1.7).
+    applicationDefaultJvmArgs = listOf(
+        "-Dorg.lwjgl.system.allocator=jemalloc",
+        "-XstartOnFirstThread",
+        "-Dorg.lwjgl.glfw.checkThread0=false"
+    )
 }
 
 repositories {
@@ -55,7 +62,14 @@ val os: String = when {
     else -> throw GradleException("Unsupported OS for LWJGL natives: ${OperatingSystem.current().name}")
 }
 
-val nativeClassifier = "natives-$os"
+// LWJGL 3.3.4 ships separate native jars for macOS x64 ("natives-macos") and
+// Apple Silicon ("natives-macos-arm64"). Pick the one matching the JVM arch
+// so the build runs on both Intel and M-series Macs.
+val nativeClassifier = if (os == "macos" && System.getProperty("os.arch").startsWith("aarch64")) {
+    "natives-macos-arm64"
+} else {
+    "natives-$os"
+}
 
 fun lwjgl(module: String) =
     "org.lwjgl:$module:$lwjglVersion"

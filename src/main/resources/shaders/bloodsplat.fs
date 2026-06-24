@@ -1,7 +1,9 @@
-#version 120
+#version 330 core
 
-varying vec2 texCoords;
-varying vec3 positionToFS;
+in vec2 texCoords;
+in vec3 positionToFS;
+
+layout(location = 0) out vec4 fragColor;
 
 uniform sampler2D tex;
 uniform vec2 particlePosition;
@@ -9,8 +11,7 @@ uniform vec3 particleColor;
 uniform float blendFactor;
 
 void main(){
-	gl_FragColor = texture2D(tex, texCoords);
-	if(gl_FragColor.w < 0.5) discard;
-	gl_FragColor = vec4(particleColor, 1 - blendFactor);
-
+	fragColor = texture(tex, texCoords);
+	if(fragColor.w < 0.5) discard;
+	fragColor = vec4(particleColor, 1 - blendFactor);
 }

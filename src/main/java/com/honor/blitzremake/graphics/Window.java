@@ -8,6 +8,7 @@ import org.lwjgl.opengl.GL;
 import com.honor.blitzremake.Game;
 
 import static org.lwjgl.glfw.GLFW.*;
+import static org.lwjgl.opengl.GL11.glViewport;
 import static org.lwjgl.system.MemoryStack.stackPush;
 
 import java.nio.IntBuffer;
@@ -89,6 +90,7 @@ public final class Window {
         sizeCallback = GLFWWindowSizeCallback.create((win, cw, ch) -> {
             width = cw;
             height = ch;
+            glViewport(0, 0, cw, ch);
         });
         glfwSetWindowSizeCallback(handle, sizeCallback);
 

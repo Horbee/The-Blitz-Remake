@@ -18,7 +18,7 @@ public class LightRenderer {
 		Shader.LIGHT.setUniformMatrix("vw_matrix", Camera.getViewMatrix());
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_ONE, GL_ONE);
-		Resources.light_mesh.bind(Shader.LIGHT);
+		Resources.light_mesh.bindLightMesh(Shader.LIGHT);
 		
 		for (Light light : lights) {
 			prepareLight(light);

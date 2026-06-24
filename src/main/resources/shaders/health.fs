@@ -1,10 +1,12 @@
-#version 120
+#version 330 core
 
-varying vec2 texCoords;
+in vec2 texCoords;
+
+layout(location = 0) out vec4 fragColor;
 
 uniform sampler2D tex;
 uniform float healthIndicator;
 
 void main(){
-	gl_FragColor = texture2D(tex, texCoords) * vec4(healthIndicator, healthIndicator, healthIndicator, 1.0);
+	fragColor = texture(tex, texCoords) * vec4(healthIndicator, healthIndicator, healthIndicator, 1.0);
 }

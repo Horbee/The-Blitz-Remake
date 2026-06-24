@@ -91,41 +91,105 @@ and `glGetError()` returns 0 (poll it or enable `KHR_debug`).
       `Player`, `Menu`, `Ending`, `Level`. `./gradlew clean build`
       passes. Game compiles and runs (silent — audio stubbed; GL 2.1
       draw path still in place until 1.4).
+- [x] **1.4** — OpenGL 2.1 → 3.3 core. `./gradlew clean build` passes.
+      Shaders: rewrote all 22 `.vert`/`.frag` under
+      `src/main/resources/shaders/` to `#version 330 core`
+      (`attribute`→`in`, `varying`→`out`/`in`, `gl_FragColor`→
+      `layout(location=0) out vec4 fragColor`, `texture2D`→`texture`,
+      dropped illegal `uniform … = mat4(1.0)`/`= vec3(1.0)` initializers,
+      added `layout(location=0) in vec3 position;` /
+      `layout(location=1) in vec2 tc;` to every vertex shader that has
+      those attributes). `level.fs` local var `texture` renamed to
+      `texColor` (shadowed the `texture()` built-in, illegal in core).
+      `VertexArray.java`: activated VAOs — `glGenVertexArrays`/
+      `glBindVertexArray` around attrib setup (imported `GL30`), VAO
+      records attrib + element-buffer state at construction;
+      `bind`/`bindParticle`/`bindLightMesh` reduced to
+      `glBindVertexArray(vao)` (dropped per-frame `getAttribLocation` +
+      `glVertexAttribPointer` + `glEnableVertexAttribArray` queries —
+      attribs now pinned to `Shader.VERTEX_ATTRIB=0`/
+      `TEXTURE_ATTRIB=1` via the `layout` qualifiers). `unbind`→
+      `glBindVertexArray(0)`. `ShaderUtils.java`: added
+      `GL_LINK_STATUS` check after `glLinkProgram` with info-log on
+      failure; compile + link failures now `throw RuntimeException`
+      (was silent print-and-continue); removed load-time
+      `glValidateProgram` (validated against wrong state, result
+      unchecked). `LightRenderer.java:21`: `bind(Shader.LIGHT)`→
+      `bindLightMesh(Shader.LIGHT)` — `light.vs` has no `tc`
+      attribute, so plain `bind` queried `getAttribLocation("tc")`=-1
+      and called `glEnableVertexAttribArray(-1)` (latent
+      `GL_INVALID_OPERATION` on core). `Window.java`: added
+      `glViewport(0,0,cw,ch)` to the framebuffer size callback.
+      `build.gradle.kts`: macOS native classifier now picks
+      `natives-macos-arm64` on Apple Silicon (was x64-only, blocked
+      all runtime on M-series Macs); added `-XstartOnFirstThread` +
+      `-Dorg.lwjgl.glfw.checkThread0=false` to `applicationDefaultJvmArgs`
+      (macOS Cocoa main-thread rule). **Runtime verification on macOS
+      is blocked by a pre-existing threading model bug, NOT by 1.4:**
+      `Game.start()` spawns a worker thread (`Game.java:58
+      new Thread(this)`) and all GLFW/GL calls happen there; Cocoa
+      requires GLFW on the process main thread, so the JVM aborts
+      (SIG 133) on Apple Silicon regardless of 1.4. The Launcher path
+      (`Launcher.java:109 new Game().start()`) has the same problem.
+      Step 1.7 verification must therefore run on Linux/Windows, OR
+      1.5/1.7 must first restructure `Game` to run its loop on the
+      calling thread (drop the `new Thread` wrapper). Shaders audited
+      textually: zero `attribute`/`varying`/`gl_FragColor`/
+      `texture2D`/uniform-initializer constructs remain; every `.vs`
+      `out` matches its `.fs` `in` by name+type; only `gl_Position`
+      built-in remains (legal in 330 core). No GLSL validator
+      (`glslangValidator`/`glslc`) installed locally to compile-check
+      offline; the `ShaderUtils` link-status check added here will
+      surface any GLSL error loudly at startup on first real run.
 
 ---
 
 ## 5. Remaining work — Step 1
 
-### 1.4 — OpenGL 2.1 → 3.3 core  *(biggest source commit)*
+### 1.4 — OpenGL 2.1 → 3.3 core  *(DONE — see checklist §4)*
 
-This is the next task. The codebase compiles against LWJGL 3 but still
-issues GL 2.1 fixed-function / compatibility calls and uses `#version 120`
-shaders. A 3.3 core context will reject most of these at runtime, so this
-step is required before the game actually renders correctly.
+Completed. The full per-file changelog is in the progress checklist
+above (§4, entry 1.4). Highlights: all 22 shaders rewritten to
+`#version 330 core`; VAOs activated in `VertexArray.java`;
+`ShaderUtils` now validates `GL_LINK_STATUS` and throws on compile/link
+failure; `LightRenderer` switched to `bindLightMesh` (latent core-profile
+`GL_INVALID_OPERATION` fix); `glViewport` added to the window size
+callback; macOS arm64 native classifier + `-XstartOnFirstThread` added
+to the Gradle run config.
 
-Tasks:
-- **Shaders** — rewrite all ~22 shader files under
+**Caveat carried forward to 1.5 / 1.7:** the game's threading model
+(`Game.start()` → `new Thread(this)`) puts all GLFW/GL calls on a worker
+thread, which Cocoa rejects on macOS (SIG 133). This predates 1.4 and is
+not fixed here. Either (a) verify 1.4's rendering on Linux/Windows, or
+(b) fold a small threading fix into 1.5: drop the `new Thread` wrapper in
+`Game` and run the loop on the calling (main) thread so GLFW is happy on
+macOS. Option (b) is recommended since 1.5 already rewrites the launcher
+and is the natural place to reconcile the lifecycle.
+
+Tasks (reference — all done):
+- **Shaders** — rewrote all 22 files under
   `src/main/resources/shaders/`:
   - `#version 120` → `#version 330 core`
-  - `attribute` → `in` (vertex shader)
+  - `attribute` → `in` (vertex) / `layout(location=…)` qualifiers added
   - `varying` → `out` (vertex) / `in` (fragment)
-  - `gl_FragColor` → declare `out vec4 fragColor;` and write to it
+  - `gl_FragColor` → `layout(location=0) out vec4 fragColor;`
   - `texture2D(u, v)` → `texture(u, v)`
-  - Drop any `gl_FragColor`-as-built-in usage.
-- **`VertexArray`** — activate VAOs: `glGenVertexArrays` +
-  `glBindVertexArray` around attribute pointer setup so attrib state
-  lives in the VAO instead of being re-specified each draw.
-- **`ShaderUtils`** — after `glLinkProgram`, validate
-  `glGetProgramiv(ID, GL_LINK_STATUS)` and log the info log on failure.
-  Cache attribute + uniform locations (query once at setup, not per
-  draw).
-- **Deprecated fixed-function removal** — sweep for any remaining
-  `glEnable(GL_TEXTURE_2D)`, `glBegin/glEnd`, `glVertex`/`glTexCoord`,
-  `glMatrixMode`, `glLoadIdentity`, `glOrtho`/`gluOrtho2D`, etc. A 3.3
-  core context has none of these. Replace with shader-based draws.
-- Verify: `./gradlew clean build`; run the game — window opens, menu
-  and level render with the new shaders, no `GL_INVALID_OPERATION`
-  errors.
+  - Dropped illegal `uniform … = mat4(1.0)` / `= vec3(1.0)` initializers
+- **`VertexArray`** — activated VAOs (`glGenVertexArrays` +
+  `glBindVertexArray`); attrib state now lives in the VAO, per-draw
+  `getAttribLocation`/`glVertexAttribPointer` calls removed.
+- **`ShaderUtils`** — `glGetProgrami(GL_LINK_STATUS)` checked after
+  `glLinkProgram`; failures throw with info log. Uniform locations were
+  already cached in `Shader.java`; attribute locations are now fixed via
+  `layout(location=…)` so no caching needed there.
+- **Deprecated fixed-function removal** — audited: the codebase had
+  **zero** immediate-mode / matrix-stack / `glEnable(GL_TEXTURE_2D)` /
+  lighting / display-list / `glAlphaFunc` calls to begin with. Nothing
+  to remove; the only core-profile blockers were the missing VAOs and
+  the `#version 120` shaders, both fixed.
+- Verify: `./gradlew clean build` passes. **Runtime render verification
+  pending** (macOS blocked by the threading model above; run on
+  Linux/Windows or after the 1.5 threading fix).
 
 ### 1.5 — GLFW launcher + JSON config
 
@@ -134,6 +198,14 @@ Tasks:
   Swing itself isn't blocking, but the launcher still touches GLFW only
   for mode enumeration; making it a proper GLFW window keeps the
   surface story uniform.
+- **Threading fix (do this here, required for macOS):** drop the
+  `new Thread(this)` wrapper in `Game.start()` (`Game.java:56-60`) and
+  run the game loop on the calling thread. GLFW/GL must execute on the
+  process main thread on macOS (Cocoa); the current worker-thread model
+  aborts with SIG 133 on Apple Silicon and was the reason 1.4 could not
+  be runtime-verified on macOS. Running on the main thread is also how
+  GLFW apps are normally structured. Keep the fixed-timestep loop body
+  unchanged.
 - Replace `Config.xml` with JSON.
   - **OPEN QUESTION (TBD — confirm with user):** add
     `com.google.code.gson:gson` as a dependency, or hand-roll a tiny
@@ -167,8 +239,18 @@ Tasks:
 - `./gradlew clean build` is clean.
 - Run the game end-to-end: launcher → menu → level → shoot enemies →
   death/ending → ESC exits cleanly. Audio plays. No GL errors.
+  - **macOS prerequisite:** the 1.5 threading fix (loop on main thread)
+    must be done first, otherwise GLFW aborts on Cocoa. On Linux/Windows
+    the current worker-thread model happens to work, so 1.4's render
+    changes can be verified there even before 1.5.
 - `./gradlew shadowJar` produces a fat jar that runs standalone with
-  natives extracted (verify on a clean machine / fresh JDK 21).
+  natives extracted (verify on a clean machine / fresh JDK 21). Note:
+  the fat jar currently does not extract/locate LWJGL natives when
+  invoked with plain `java -jar` — the `run`/`installDist` tasks set up
+  the native classpath via Gradle's `application` plugin. If standalone
+  `java -jar` execution is a hard requirement, add LWJGL's
+  `SharedLibraryLoader` extraction path or bundle natives beside the
+  jar; otherwise document `./gradlew run` as the launch method.
 
 ---
 
@@ -199,8 +281,24 @@ Tasks:
   decode — replaced by STB in 1.6.
 - Audio is a **no-op stub** in 1.3; the game runs silent until 1.6.
   `Sound.java` assigns `NoOpAudio` instances to all 15 static fields.
-- Shaders still `#version 120`, draw calls still GL 2.1 — the game will
-  not render correctly on a 3.3 core context until **1.4** is done.
+- Shaders were `#version 120` with GL 2.1 draw calls — **fixed in 1.4**.
+  All 22 shaders are now `#version 330 core`; VAOs are active;
+  `ShaderUtils` validates link status. The game should render correctly
+  on a 3.3 core context once the macOS threading prerequisite (below) is
+  resolved or verification is done on Linux/Windows.
+- **macOS threading landmine (new, surfaced during 1.4 verification):**
+  `Game.start()` (`Game.java:56-60`) wraps the loop in
+  `new Thread(this, "BlitzRemake").start()`, so all GLFW/GL calls run on
+  a worker thread. Cocoa requires GLFW on the process main thread, so on
+  Apple Silicon the JVM aborts with SIG 133 (`-XstartOnFirstThread` +
+  `-Dorg.lwjgl.glfw.checkThread0=false` do not help — Cocoa itself
+  rejects it). Linux/Windows tolerate off-main GLFW. Fix is scheduled
+  for 1.5: run the loop on the calling thread. Until then, runtime
+  verification of rendering must happen on Linux/Windows.
+- `build.gradle.kts` native classifier now handles Apple Silicon
+  (`natives-macos-arm64` vs `natives-macos`) — fixed in 1.4. The 1.2
+  config only selected `natives-macos` (x64), which meant no LWJGL
+  native could load at all on M-series Macs.
 - The `dev` branch history was rewritten (author rewrite to Horbee).
   If `dev` was previously pushed to a remote, the next push needs
   `--force-with-lease`.
@@ -218,8 +316,8 @@ Tasks:
 | `src/main/java/com/honor/blitzremake/Game.java` | Main loop, GLFW/AL lifecycle (`alDeviceHandle`/`alContextHandle` longs) |
 | `src/main/java/com/honor/blitzremake/graphics/Window.java` | GLFW window holder (created in 1.3) |
 | `src/main/java/com/honor/blitzremake/graphics/Shader.java` | GLSL program wrapper (uses `glUniformMatrix4fv`) |
-| `src/main/java/com/honor/blitzremake/graphics/VertexArray.java` | Needs VAO activation in 1.4 |
-| `src/main/java/com/honor/blitzremake/graphics/ShaderUtils.java` | Needs link validation + location caching in 1.4 |
+| `src/main/java/com/honor/blitzremake/graphics/VertexArray.java` | VAO-backed mesh (VAOs activated in 1.4); `bind`=`glBindVertexArray` |
+| `src/main/java/com/honor/blitzremake/graphics/ShaderUtils.java` | GLSL program loader (link-status check + throw-on-failure added in 1.4) |
 | `src/main/java/com/honor/blitzremake/graphics/Texture.java` | Needs STB PNG decode in 1.6 |
 | `src/main/java/com/honor/blitzremake/input/Input.java` | GLFW-callback-fed static facade + `Input.Mouse` shim |
 | `src/main/java/com/honor/blitzremake/util/MyDisplay.java` | Thin wrapper over `Window.init` |
@@ -229,13 +327,14 @@ Tasks:
 | `src/main/java/com/honor/blitzremake/sound/Sound.java` | 15 static fields, currently all `NoOpAudio` |
 | `src/main/java/com/honor/blitzremake/font/Font.java` | Glyph atlas; resource path fix in 1.6 |
 | `src/main/java/com/honor/launcher/Launcher.java` | Swing UI + `glfwGetVideoModes`; full rewrite in 1.5 |
-| `src/main/resources/shaders/` | ~22 `.vert`/`.frag` files to rewrite in 1.4 |
+| `src/main/resources/shaders/` | 22 `.vs`/`.fs` files, rewritten to `#version 330 core` in 1.4 |
 
 ---
 
 ## 9. Current commit graph (dev branch)
 
 ```
+(1.4 uncommitted — working tree)   ← OpenGL 2.1 → 3.3 core
 0a78a35 Port platform layer to GLFW + LWJGL 3 OpenAL   ← HEAD of dev
 441753b build: add Gradle (Kotlin DSL) + LWJGL 3 + JOML toolchain
 5ea7435 Restructure: flatten BlitzFinished/ to repo root (Gradle layout)
