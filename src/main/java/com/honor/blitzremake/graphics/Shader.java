@@ -71,7 +71,7 @@ public class Shader {
 	}
 	
 	public void setUniformMatrix(String name, Matrix4f matrix) {
-		glUniformMatrix4(getUniformLocation(name), false, matrix.toFloatBuffer());
+		glUniformMatrix4fv(getUniformLocation(name), false, matrix.toFloatBuffer());
 	}
 	
 	public void enable() {

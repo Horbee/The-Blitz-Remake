@@ -1,15 +1,27 @@
 package com.honor.blitzremake;
 
-import static org.lwjgl.opengl.GL11.*;
-import static org.lwjgl.opengl.GL13.*;
+import static org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE;
+import static org.lwjgl.openal.ALC10.alcCloseDevice;
+import static org.lwjgl.openal.ALC10.alcCreateContext;
+import static org.lwjgl.openal.ALC10.alcDestroyContext;
+import static org.lwjgl.openal.ALC10.alcMakeContextCurrent;
+import static org.lwjgl.openal.ALC10.alcOpenDevice;
+import static org.lwjgl.opengl.GL11.GL_BLEND;
+import static org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA;
+import static org.lwjgl.opengl.GL11.GL_SRC_ALPHA;
+import static org.lwjgl.opengl.GL11.glBlendFunc;
+import static org.lwjgl.opengl.GL11.glClearColor;
+import static org.lwjgl.opengl.GL11.glEnable;
+import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
+import static org.lwjgl.opengl.GL13.glActiveTexture;
+
 import java.util.Random;
-import org.lwjgl.input.Keyboard;
-import org.lwjgl.openal.AL;
-import org.lwjgl.opengl.Display;
+
 import com.honor.blitzremake.entity.MyCursor;
 import com.honor.blitzremake.entity.Player;
 import com.honor.blitzremake.font.Font;
 import com.honor.blitzremake.graphics.Shader;
+import com.honor.blitzremake.graphics.Window;
 import com.honor.blitzremake.hud.HUD;
 import com.honor.blitzremake.input.Input;
 import com.honor.blitzremake.level.Level;
@@ -34,6 +46,9 @@ public class Game implements Runnable {
 	private Level level;
 	private Ending ending;
 
+	private long alDeviceHandle;
+	private long alContextHandle;
+
 	public static void main(String[] args) {
 		new Game().start();
 	}
@@ -45,15 +60,45 @@ public class Game implements Runnable {
 	}
 
 	private void initGL() {
-		Display.setVSyncEnabled(true);
-		String version = glGetString(GL_VERSION);
+		// OpenGL 3.3 core context is already set up by Window.init (GLFW hints).
+		// VSync is configured there via glfwSwapInterval(1).
+		String version = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_VERSION);
 		System.out.println("OpenGL " + version);
 
-		glEnable(GL_TEXTURE_2D);
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glClearColor(0f, 0f, 0f, 1.0f);
 		glActiveTexture(GL_TEXTURE0);
+	}
+
+	private void initAL() {
+		long device = alcOpenDevice((java.nio.ByteBuffer) null);
+		if (device == 0L) {
+			System.err.println("Could not open OpenAL device; audio disabled.");
+			return;
+		}
+		alDeviceHandle = device;
+		long ctx = alcCreateContext(device, (int[]) null);
+		if (ctx == 0L) {
+			System.err.println("Could not create OpenAL context; audio disabled.");
+			alcCloseDevice(device);
+			alDeviceHandle = 0L;
+			return;
+		}
+		alContextHandle = ctx;
+		alcMakeContextCurrent(ctx);
+	}
+
+	private void destroyAL() {
+		if (alContextHandle != 0L) {
+			alcMakeContextCurrent(0L);
+			alcDestroyContext(alContextHandle);
+			alContextHandle = 0L;
+		}
+		if (alDeviceHandle != 0L) {
+			alcCloseDevice(alDeviceHandle);
+			alDeviceHandle = 0L;
+		}
 	}
 
 	private void loadResources() {
@@ -120,20 +165,21 @@ public class Game implements Runnable {
 		int windowed = Util.getProperty("Windowed");
 		int w = Util.getProperty("Width");
 		int h = Util.getProperty("Height");
-		if(windowed == 1)
+		if (windowed == 1)
 			MyDisplay.set();
 		else
 			MyDisplay.setDisplayMode(w, h, true);
-		
+
 		Util.setBlankCursor();
 		initGL();
+		initAL();
 		Input.create();
 		loadResources();
-				
+
 		menu = new Menu();
 		level = new Level();
 		ending = new Ending(this);
-		
+
 		Sound.theme1.playAsSoundEffect(1.0f, 0.5f, true);
 
 		long lastTime = System.nanoTime();
@@ -156,23 +202,23 @@ public class Game implements Runnable {
 
 			if (System.currentTimeMillis() - timer > 1000) {
 				timer += 1000;
-				// System.out.println(updates + " ups, " + frames + " fps");
-				Display.setTitle(title + " | " + updates + " ups, " + frames + " fps");
+				Window.setTitle(title + " | " + updates + " ups, " + frames + " fps");
 				updates = 0;
 				frames = 0;
 			}
 
-			if (Keyboard.isKeyDown(Keyboard.KEY_ESCAPE)) {
+			if (Input.isKeyDown(GLFW_KEY_ESCAPE)) {
 				running = false;
 			}
 
-			if (Display.isCloseRequested()) {
+			if (Window.isCloseRequested()) {
 				running = false;
 			}
 		}
 
-		Display.destroy();
-		AL.destroy();
+		Input.dispose();
+		Window.destroy();
+		destroyAL();
 	}
 
 	private void update() {
@@ -188,12 +234,12 @@ public class Game implements Runnable {
 		if (State.getState() == State.ENDING) {
 			ending.update();
 		}
-		
+
 		time++;
 	}
 
 	private void render() {
-		glClear(GL_COLOR_BUFFER_BIT);
+		org.lwjgl.opengl.GL11.glClear(org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT);
 		if (State.getState() == State.MENU) {
 			menu.render();
 		}
@@ -204,11 +250,12 @@ public class Game implements Runnable {
 		if (State.getState() == State.ENDING) {
 			ending.render();
 		}
-		Display.update();
+		Window.swapBuffers();
+		Window.pollEvents();
 	}
 
 	public void reset() {
-		level = new Level(); 
+		level = new Level();
 		Level.resettingStaticVariables();
 		Player.ammo = 0;
 		Player.failed = false;

@@ -2,7 +2,6 @@ package com.honor.blitzremake.util;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.URISyntaxException;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -13,14 +12,12 @@ import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
-import org.lwjgl.BufferUtils;
-import org.lwjgl.LWJGLException;
-import org.lwjgl.input.Cursor;
-import org.lwjgl.input.Mouse;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
+
+import com.honor.blitzremake.graphics.Window;
 
 public class Util {
 
@@ -40,15 +37,13 @@ public class Util {
 		return 0;
 	}
 
+	/**
+	 * Hides the OS cursor over the game window. Replaces the LWJGL 2
+	 * {@code Mouse.setNativeCursor(emptyCursor)} hack with GLFW's
+	 * {@code GLFW_CURSOR_HIDDEN} input mode.
+	 */
 	public static void setBlankCursor() {
-		try {
-			Cursor emptyCursor = new Cursor(1, 1, 0, 0, 1, BufferUtils.createIntBuffer(1), null);
-			Mouse.setNativeCursor(emptyCursor);
-		} catch (LWJGLException e) {
-			System.err.println("I'm not able to set the blank cursor!");
-			e.printStackTrace();
-			System.exit(1);
-		}
+		Window.hideCursor();
 	}
 
 	public static void writeXml(int windowedIN, int widthIN, int heightIN) {

@@ -6,8 +6,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import org.lwjgl.input.Mouse;
-
 import com.honor.blitzremake.Game;
 import com.honor.blitzremake.Resources;
 import com.honor.blitzremake.State;

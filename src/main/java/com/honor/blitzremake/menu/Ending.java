@@ -1,6 +1,6 @@
 package com.honor.blitzremake.menu;
 
-import org.lwjgl.input.Keyboard;
+import static org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE;
 import com.honor.blitzremake.Game;
 import com.honor.blitzremake.graphics.Shader;
 import com.honor.blitzremake.graphics.Texture;
@@ -22,7 +22,7 @@ public class Ending {
 	
 	public void update() {
 //		if (Keyboard.isKeyDown(Keyboard.KEY_SPACE) || Input.controller.isButtonPressed(0)) {
-		if (Keyboard.isKeyDown(Keyboard.KEY_SPACE)) {
+		if (Input.isKeyDown(GLFW_KEY_SPACE)) {
 			game.reset();
 		}
 	}

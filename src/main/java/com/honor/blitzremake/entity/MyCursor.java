@@ -1,12 +1,11 @@
 package com.honor.blitzremake.entity;
 
 import static org.lwjgl.opengl.GL11.*;
-import org.lwjgl.input.Mouse;
-import org.lwjgl.opengl.Display;
 import com.honor.blitzremake.Game;
 import com.honor.blitzremake.Resources;
 import com.honor.blitzremake.graphics.Shader;
 import com.honor.blitzremake.graphics.Texture;
+import com.honor.blitzremake.input.Input;
 import com.honor.blitzremake.math.Matrix4f;
 import com.honor.blitzremake.math.Vector3f;
 
@@ -40,7 +39,10 @@ public class MyCursor {
 	}
 
 	private static Matrix4f getTransformation() {
-		return Matrix4f.translate(new Vector3f(Mouse.getX(), Display.getDisplayMode().getHeight() - Mouse.getY(), 0)).multiply(Matrix4f.rotateAngle(Game.time)).multiply(Matrix4f.scale(new Vector3f(scale, scale, 1.0f)));
+		// GLFW reports cursor Y top-down (0 at top), so no Y flip is needed
+		// (the old code did Display.getDisplayMode().getHeight() - Mouse.getY()
+		// to convert LWJGL2's bottom-up Y to top-down).
+		return Matrix4f.translate(new Vector3f(Input.Mouse.getX(), Input.Mouse.getY(), 0)).multiply(Matrix4f.rotateAngle(Game.time)).multiply(Matrix4f.scale(new Vector3f(scale, scale, 1.0f)));
 	}
 
 }

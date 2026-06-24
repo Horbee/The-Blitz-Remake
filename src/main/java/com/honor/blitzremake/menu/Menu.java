@@ -1,7 +1,7 @@
 package com.honor.blitzremake.menu;
 
 import static org.lwjgl.opengl.GL11.*;
-import org.lwjgl.input.Keyboard;
+import static org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE;
 import com.honor.blitzremake.Game;
 import com.honor.blitzremake.Resources;
 import com.honor.blitzremake.State;
@@ -25,7 +25,7 @@ public class Menu {
 	public void update() {
 		time++;
 		//if (Keyboard.isKeyDown(Keyboard.KEY_SPACE) || Input.controller.isButtonPressed(0)) {
-		if (Keyboard.isKeyDown(Keyboard.KEY_SPACE)) {
+		if (Input.isKeyDown(GLFW_KEY_SPACE)) {
 			time = 0;
 			fadeOut = true;
 		}

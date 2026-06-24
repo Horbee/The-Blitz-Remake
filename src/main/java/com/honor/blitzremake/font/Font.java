@@ -11,7 +11,7 @@ import static org.lwjgl.opengl.GL13.*;
 
 public class Font {
 
-	private static int size = 32; // egy darab betû hány pixel
+	private static int size = 32; // size of a single glyph in pixels
 	private static int[] texIDs;
 	private static VertexArray mesh;
 	public static float blend = 1.0f;

@@ -1,70 +1,100 @@
 package com.honor.blitzremake.input;
 
-import org.lwjgl.LWJGLException;
-import org.lwjgl.input.Controller;
-import org.lwjgl.input.Controllers;
-import org.lwjgl.input.Keyboard;
-import org.lwjgl.input.Mouse;
+import org.lwjgl.glfw.GLFWCursorPosCallback;
+import org.lwjgl.glfw.GLFWKeyCallback;
+import org.lwjgl.glfw.GLFWMouseButtonCallback;
 
-public class Input {
+import com.honor.blitzremake.graphics.Window;
 
-	public static Controller controller;
+import static org.lwjgl.glfw.GLFW.*;
 
-	public static void create() {
-		/*try {
-			Controllers.create();
-		} catch (LWJGLException e) {
-			e.printStackTrace();
-		}
+/**
+ * Input façade preserving the 2015 build's static boolean API
+ * ({@code Input.up/down/left/right}) so game logic above stays unchanged.
+ *
+ * Replaces the LWJGL 2 polling APIs {@code org.lwjgl.input.Keyboard} and
+ * {@code org.lwjgl.input.Mouse} with GLFW event callbacks. Callbacks are
+ * registered against the {@link Window} handle once; {@link #pollInput()}
+ * snapshots the keyboard state into the directional booleans each tick.
+ *
+ * A small {@link Mouse} shim exposes {@code getX/getY/isButtonDown} so the
+ * cursor angle / shooting code in {@code Player} and {@code MyCursor} keeps
+ * working with minimal edits. GLFW reports cursor Y top-down (0 at top),
+ * which matches the flipped Y the old code computed via
+ * {@code Display.getDisplayMode().getHeight() - Mouse.getY()}; the shim
+ * therefore returns Y as-is and callers no longer flip.
+ */
+public final class Input {
 
-		controller = Controllers.getController(0);
+    public static boolean up, down, left, right;
 
-		for (int i = 0; i < controller.getAxisCount(); i++) {
-			System.out.println(controller.getAxisName(i));
-			controller.setDeadZone(i, 0.3f);
-		}
+    private static GLFWKeyCallback keyCallback;
+    private static GLFWMouseButtonCallback mouseButtonCallback;
+    private static GLFWCursorPosCallback cursorPosCallback;
 
-		for (int i = 0; i < controller.getButtonCount(); i++) {
-			System.out.println(controller.getButtonName(i));
-		}*/
+    private static final boolean[] keys = new boolean[GLFW_KEY_LAST + 1];
+    private static double mouseX;
+    private static double mouseY;
+    private static boolean mouseButtonLeft;
 
-	}
+    private Input() {
+    }
 
-	public static boolean up, down, left, right;
+    public static void create() {
+        long window = Window.handle();
 
-	public static void pollInput() {
-		up = false;
-		down = false;
-		left = false;
-		right = false;
-		
-		if (Keyboard.isKeyDown(Keyboard.KEY_W) || Keyboard.isKeyDown(Keyboard.KEY_UP))
-			up = true;
-		else if (Keyboard.isKeyDown(Keyboard.KEY_S) || Keyboard.isKeyDown(Keyboard.KEY_DOWN))
-			down = true;
+        keyCallback = GLFWKeyCallback.create((win, key, scancode, action, mods) -> {
+            if (key < 0 || key >= keys.length) return;
+            keys[key] = action != GLFW_RELEASE;
+        });
+        glfwSetKeyCallback(window, keyCallback);
 
-		if (Keyboard.isKeyDown(Keyboard.KEY_A) || Keyboard.isKeyDown(Keyboard.KEY_LEFT))
-			left = true;
-		else if (Keyboard.isKeyDown(Keyboard.KEY_D) || Keyboard.isKeyDown(Keyboard.KEY_RIGHT))
-			right = true;
-		
-		/*
-		if (Keyboard.isKeyDown(Keyboard.KEY_W) || Keyboard.isKeyDown(Keyboard.KEY_UP) || controller.getAxisValue(0) < 0)
-			up = true;
-		else if (Keyboard.isKeyDown(Keyboard.KEY_S) || Keyboard.isKeyDown(Keyboard.KEY_DOWN) || controller.getAxisValue(0) > 0)
-			down = true;
+        mouseButtonCallback = GLFWMouseButtonCallback.create((win, button, action, mods) -> {
+            if (button == GLFW_MOUSE_BUTTON_LEFT) {
+                mouseButtonLeft = action != GLFW_RELEASE;
+            }
+        });
+        glfwSetMouseButtonCallback(window, mouseButtonCallback);
 
-		if (Keyboard.isKeyDown(Keyboard.KEY_A) || Keyboard.isKeyDown(Keyboard.KEY_LEFT) || controller.getAxisValue(1) < 0)
-			left = true;
-		else if (Keyboard.isKeyDown(Keyboard.KEY_D) || Keyboard.isKeyDown(Keyboard.KEY_RIGHT) || controller.getAxisValue(1) > 0)
-			right = true;
+        cursorPosCallback = GLFWCursorPosCallback.create((win, xpos, ypos) -> {
+            mouseX = xpos;
+            mouseY = ypos;
+        });
+        glfwSetCursorPosCallback(window, cursorPosCallback);
+    }
 
-		Controllers.clearEvents();
-		controller.poll();
-		float x = ((float) Mouse.getX()) + controller.getAxisValue(3) * 10;
-		float y = ((float) Mouse.getY()) - controller.getAxisValue(2) * 10;
-		Mouse.setCursorPosition((int) x, (int) y);*/
-		
-	}
+    public static void pollInput() {
+        up = keys[GLFW_KEY_W] || keys[GLFW_KEY_UP];
+        down = keys[GLFW_KEY_S] || keys[GLFW_KEY_DOWN];
+        left = keys[GLFW_KEY_A] || keys[GLFW_KEY_LEFT];
+        right = keys[GLFW_KEY_D] || keys[GLFW_KEY_RIGHT];
+    }
 
+    public static boolean isKeyDown(int key) {
+        return key >= 0 && key < keys.length && keys[key];
+    }
+
+    public static void dispose() {
+        if (keyCallback != null) { keyCallback.free(); keyCallback = null; }
+        if (mouseButtonCallback != null) { mouseButtonCallback.free(); mouseButtonCallback = null; }
+        if (cursorPosCallback != null) { cursorPosCallback.free(); cursorPosCallback = null; }
+    }
+
+    /**
+     * Mouse shim replacing the LWJGL 2 {@code org.lwjgl.input.Mouse} API.
+     * GLFW reports Y top-down (0 at top, growing downward) so callers that
+     * previously did {@code Display.getDisplayMode().getHeight() - Mouse.getY()}
+     * should now use {@link #getY()} directly.
+     */
+    public static final class Mouse {
+        private Mouse() {}
+
+        public static int getX() { return (int) mouseX; }
+
+        public static int getY() { return (int) mouseY; }
+
+        public static boolean isButtonDown(int button) {
+            return button == 0 && mouseButtonLeft;
+        }
+    }
 }

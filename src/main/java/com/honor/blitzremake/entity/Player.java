@@ -2,15 +2,13 @@ package com.honor.blitzremake.entity;
 
 import static org.lwjgl.opengl.GL11.*;
 
-import org.lwjgl.input.Mouse;
-import org.lwjgl.opengl.Display;
-
 import com.honor.blitzremake.Game;
 import com.honor.blitzremake.camera.Camera;
 import com.honor.blitzremake.graphics.Animation;
 import com.honor.blitzremake.graphics.Shader;
 import com.honor.blitzremake.graphics.Texture;
 import com.honor.blitzremake.graphics.VertexArray;
+import com.honor.blitzremake.graphics.Window;
 import com.honor.blitzremake.hud.HUD;
 import com.honor.blitzremake.input.Input;
 import com.honor.blitzremake.level.Level;
@@ -57,9 +55,11 @@ public class Player extends Mob {
 	}
 
 	public float angleMouse() {
-		// MUST TWEEK!! in opengl 0,0 is in the bottom left corner
-		int mx = Mouse.getX();
-		int my = Display.getDisplayMode().getHeight() - Mouse.getY();
+		// GLFW reports cursor Y top-down (0 at top), so no Y flip is needed
+		// (the old code did Display.getDisplayMode().getHeight() - Mouse.getY()
+		// to convert LWJGL2's bottom-up Y to top-down).
+		int mx = Input.Mouse.getX();
+		int my = Input.Mouse.getY();
 
 		float dx = (Game.WIDTH / 2) - mx;
 		float dy = (Game.HEIGHT / 2) - my;
@@ -138,7 +138,7 @@ public class Player extends Mob {
 
 		top = topIdle;
 //		if (Mouse.isButtonDown(0) || Input.controller.getAxisValue(4) > 0f) {
-		if (Mouse.isButtonDown(0)) {
+		if (Input.Mouse.isButtonDown(0)) {
 			shoot();
 		}
 
