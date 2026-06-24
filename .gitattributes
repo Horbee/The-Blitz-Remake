@@ -1,0 +1,12 @@
+# Normalize line endings: repository stores LF, working tree gets LF on Unix,
+# CRLF on Windows via core.autocrlf. Force text on source assets so renormalize
+# keeps them stable across platforms.
+* text=auto eol=lf
+
+# Binary resources — must never be normalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.pdn binary
+*.ogg binary
+*.dll binary
