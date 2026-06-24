@@ -22,15 +22,17 @@ java {
 }
 
 application {
-    mainClass = "com.honor.launcher.Launcher"
+    // Game.main is the process entry: it inits GLFW, runs the GLFW launcher
+    // to collect a Config, then runs the game loop on the same (main) thread.
+    mainClass = "com.honor.blitzremake.Game"
     // Allow LWJGL to use jemalloc for native memory allocation if present.
     // -XstartOnFirstThread is required by GLFW on macOS (Cocoa main-thread
-    // rule); harmless on Linux/Windows. The game's worker-thread model means
-    // full runtime verification must happen on Linux/Windows (see todo 1.7).
+    // rule); harmless on Linux/Windows. As of Step 1.5 the game loop runs on
+    // the main thread (the Thread wrapper was removed), so the GLFW thread
+    // check workaround is no longer needed.
     applicationDefaultJvmArgs = listOf(
         "-Dorg.lwjgl.system.allocator=jemalloc",
-        "-XstartOnFirstThread",
-        "-Dorg.lwjgl.glfw.checkThread0=false"
+        "-XstartOnFirstThread"
     )
 }
 
@@ -96,6 +98,10 @@ dependencies {
     // so the GL 3.3 rewrite in 1.4 can use it directly where the hand-rolled
     // Matrix4f would otherwise need an interim bridge.
     implementation("org.joml:joml:$jomlVersion")
+
+    // JSON config parser (Step 1.5). Gson is small (~280 KB) and keeps the
+    // config read/write trivial versus a hand-rolled parser.
+    implementation("com.google.code.gson:gson:2.11.0")
 }
 
 // ---------------------------------------------------------------------------

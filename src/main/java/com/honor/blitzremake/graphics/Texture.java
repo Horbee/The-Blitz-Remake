@@ -3,8 +3,8 @@ package com.honor.blitzremake.graphics;
 import static org.lwjgl.opengl.GL11.*;
 
 import java.awt.image.BufferedImage;
-import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,11 +59,29 @@ public class Texture {
 		ID = load(path);
 	}
 
+	/**
+	 * Loads a PNG from the classpath. The {@code res/} prefix used by the
+	 * static field initializers is stripped — resources live at
+	 * {@code src/main/resources/} so on the classpath the path is e.g.
+	 * {@code img/blast1.png}. AWT {@code ImageIO} is still used for the
+	 * actual decode; the STB decode is a Step 1.6 task.
+	 */
+	private static InputStream openClasspath(String path) {
+		String cp = path.startsWith("res/") ? path.substring(4) : path;
+		InputStream in = Thread.currentThread().getContextClassLoader().getResourceAsStream(cp);
+		if (in == null) {
+			System.err.println("Texture resource not found on classpath: " + cp);
+		}
+		return in;
+	}
+
 	private int load(String path) {
 		int[] pixels = null;
-		try {
-			BufferedImage img = ImageIO.read(new FileInputStream(path));
-			// BufferedImage img = ImageIO.read(new FileInputStream(path));
+		try (InputStream in = openClasspath(path)) {
+			if (in == null) {
+				return 0;
+			}
+			BufferedImage img = ImageIO.read(in);
 			width = img.getWidth();
 			height = img.getHeight();
 			pixels = new int[width * height];
@@ -118,8 +136,11 @@ public class Texture {
 		int index = 0;
 		int[] ids = new int[hLength * vLength];
 		int[] sheet = null;
-		try {
-			BufferedImage image = ImageIO.read(new FileInputStream(path));
+		try (InputStream in = openClasspath(path)) {
+			if (in == null) {
+				return ids;
+			}
+			BufferedImage image = ImageIO.read(in);
 			width = image.getWidth();
 			height = image.getHeight();
 			sheet = new int[width * height];

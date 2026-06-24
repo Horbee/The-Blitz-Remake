@@ -45,13 +45,15 @@ public final class Window {
         Window.height = h;
         Window.fullscreen = fullscreen;
 
-        GLFWErrorCallback.createPrint(System.err).set();
+        // GLFW is initialised once at the process boundary (see initGLFW /
+        // terminateGLFW) so the launcher window and the game window can both
+        // exist in the same process without re-calling glfwInit.
         if (!glfwInit()) {
-            throw new IllegalStateException("Unable to initialize GLFW");
+            throw new IllegalStateException("GLFW not initialised; call Window.initGLFW() first");
         }
 
         glfwDefaultWindowHints();
-        // OpenGL 3.3 core, forward-compatible. (Shader/VAO rewrite in 1.4.)
+        // OpenGL 3.3 core, forward-compatible.
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -153,6 +155,27 @@ public final class Window {
             glfwDestroyWindow(handle);
             handle = 0L;
         }
+        // glfwTerminate is called once at the process boundary via
+        // Window.terminateGLFW(); not here, so a subsequent game window can
+        // be created in the same process.
+    }
+
+    /**
+     * Initialise GLFW once at process start. Installs the error callback and
+     * calls {@code glfwInit()}. Paired with {@link #terminateGLFW()}.
+     */
+    public static void initGLFW() {
+        GLFWErrorCallback.createPrint(System.err).set();
+        if (!glfwInit()) {
+            throw new IllegalStateException("Unable to initialize GLFW");
+        }
+    }
+
+    /**
+     * Tear down GLFW at process end. Frees the error callback and calls
+     * {@code glfwTerminate()}. Paired with {@link #initGLFW()}.
+     */
+    public static void terminateGLFW() {
         glfwTerminate();
         GLFWErrorCallback callback = glfwSetErrorCallback(null);
         if (callback != null) {

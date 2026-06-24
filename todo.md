@@ -141,6 +141,48 @@ and `glGetError()` returns 0 (poll it or enable `KHR_debug`).
       (`glslangValidator`/`glslc`) installed locally to compile-check
       offline; the `ShaderUtils` link-status check added here will
       surface any GLSL error loudly at startup on first real run.
+- [x] **1.5** — GLFW launcher + JSON config (Gson) + macOS threading fix.
+      `./gradlew clean build` passes; **runtime-verified on macOS
+      (Apple Silicon)** — launcher window opens, game window opens, 1.4
+      shaders render on a 4.1 Metal core context, no GL errors.
+      Threading: removed `implements Runnable` / `Thread` wrapper /
+      `start()` from `Game`; `main()` now runs the launcher loop and
+      game loop on the process main thread (required by Cocoa; also the
+      standard GLFW structure). `Game` takes a `Config` in its
+      constructor instead of reading `Util.getProperty` three times.
+      Launcher: full rewrite of `launcher/Launcher.java` — Swing JFrame
+      → GLFW window with its own 3.3 core context + immediate-mode UI
+      (uppercase-only, since the font atlas has no lowercase). Renders
+      a WINDOWED toggle, a resolution list (click to select, selected
+      row highlighted in accent color), and SAVE LAUNCH / EXIT buttons
+      via `Font` + `Shader.FONT`/`MENU`. `Launcher.run()` blocks on its
+      own event loop and returns a `Config` (or null for exit). The
+      launcher window is destroyed before the game window is created so
+      the two GL contexts never coexist. Config: new
+      `util/Config.java` record (`boolean windowed, int width, int
+      height` + `defaults()`). `Util.java` rewritten — removed all
+      `javax.xml`/`org.w3c.dom` code; added `loadConfig()`/`saveConfig`
+      via Gson (`com.google.code.gson:gson:2.11.0` added to
+      `build.gradle.kts`). `config.json` is CWD-relative (classpath
+      loading deferred to 1.6); falls back to `Config.defaults()`
+      (windowed 900×506) when missing. `Window.java`: split
+      `glfwInit`/`glfwTerminate` out of `init`/`destroy` into
+      `Window.initGLFW()`/`terminateGLFW()` called once at the process
+      boundary in `Game.main`, so the launcher and game windows share
+      one GLFW session. Deleted `src/main/resources/Config.xml`.
+      `build.gradle.kts`: `mainClass` → `com.honor.blitzremake.Game`;
+      removed the `-Dorg.lwjgl.glfw.checkThread0=false` workaround
+      (no longer needed — loop is on main thread).
+      **Pulled forward from 1.6 (minimal classpath resource loading):**
+      `FileUtils.loadAsString` and `Texture.load`/`loadFont` now read
+      from the classpath (`getResourceAsStream`) instead of CWD
+      `FileInputStream`/`FileReader`. This was required to verify 1.5
+      (the launcher loads shaders + the font atlas, which triggered
+      `Texture`'s static initializer loading all game textures). The
+      `res/` prefix on texture paths is stripped to map to the
+      classpath root (`res/img/x.png` → `img/x.png`). **The AWT
+      `ImageIO`/`BufferedImage` PNG decode is unchanged** — STB decode
+      remains the 1.6 task. Sound OGG loading is also still 1.6.
 
 ---
 
@@ -191,26 +233,15 @@ Tasks (reference — all done):
   pending** (macOS blocked by the threading model above; run on
   Linux/Windows or after the 1.5 threading fix).
 
-### 1.5 — GLFW launcher + JSON config
+### 1.5 — GLFW launcher + JSON config  *(DONE — see checklist §4)*
 
-- Replace the Swing UI in `launcher/Launcher.java` with a GLFW window
-  (or a minimal immediate-mode UI drawn with the new 3.3 shaders).
-  Swing itself isn't blocking, but the launcher still touches GLFW only
-  for mode enumeration; making it a proper GLFW window keeps the
-  surface story uniform.
-- **Threading fix (do this here, required for macOS):** drop the
-  `new Thread(this)` wrapper in `Game.start()` (`Game.java:56-60`) and
-  run the game loop on the calling thread. GLFW/GL must execute on the
-  process main thread on macOS (Cocoa); the current worker-thread model
-  aborts with SIG 133 on Apple Silicon and was the reason 1.4 could not
-  be runtime-verified on macOS. Running on the main thread is also how
-  GLFW apps are normally structured. Keep the fixed-timestep loop body
-  unchanged.
-- Replace `Config.xml` with JSON.
-  - **OPEN QUESTION (TBD — confirm with user):** add
-    `com.google.code.gson:gson` as a dependency, or hand-roll a tiny
-    JSON parser to keep the dependency list lean?
-- Persist chosen resolution + fullscreen toggle.
+Completed and runtime-verified on macOS (Apple Silicon). Full changelog
+in §4, entry 1.5. The Swing launcher is gone; the GLFW launcher renders
+an immediate-mode UI with the 1.4 shaders; `Game` runs its loop on the
+main thread (Cocoa-safe); config is `config.json` via Gson. A minimal
+slice of 1.6 (classpath loading for shaders + textures, AWT decode kept)
+was pulled forward to make verification possible — see 1.6 for what
+remains.
 
 ### 1.6 — STB resource loading + real audio
 
@@ -218,18 +249,24 @@ Tasks (reference — all done):
   PNG decode with `stbi_load_from_memory`. Replace the
   `org.lwjgl.BufferUtils.createByteBuffer` call at line ~139 with
   `MemoryStack`/`MemoryUtil` (the legacy `org.lwjgl.BufferUtils` still
-  ships in LWJGL 3 and compiles, but it's deprecated).
+  ships in LWJGL 3 and compiles, but it's deprecated). **Note: the
+  classpath *path* fix is already done in 1.5** (`Texture.load`/`loadFont`
+  read via `getResourceAsStream`, stripping the `res/` prefix); only the
+  *decoder* (AWT → STB) remains here.
 - **`Sound.java` + a real `Audio` impl** — load OGG via
   `stb_vorbis_decode_memory` → OpenAL buffer → source playback
   (`alGenSources`/`alGenBuffers`/`alSourcePlay`). Replace the
-  `NoOpAudio` stub assigned to all 15 static `Sound` fields.
-- **Classpath resource loading** — `new FileInputStream("res/...")`
-  (relative-path, breaks from a fat jar) →
-  `Thread.currentThread().getContextClassLoader().getResourceAsStream(...)`
-  everywhere resources are opened.
+  `NoOpAudio` stub assigned to all 15 static `Sound` fields. Sound files
+  also need classpath loading (same pattern as textures/shaders).
+- **Classpath resource loading** — **mostly done in 1.5** for shaders
+  (`FileUtils.loadAsString`) and textures (`Texture.load`/`loadFont`).
+  Remaining: sound files in `Sound.java` still open via relative
+  `FileInputStream`; convert those too. `config.json` is also still
+  CWD-relative (`Util.loadConfig`/`saveConfig` use `Path.of("config.json")`);
+  optionally move it to classpath or `~/.blitz/` for fat-jar cleanliness.
 - **`Font.java`** —
   - **OPEN QUESTION (TBD — confirm with user):** keep the existing AWT
-    glyph atlas (just fix the resource loading path) or switch to
+    glyph atlas (resource path already fixed in 1.5) or switch to
     STB-truetype for a fully AWT-free stack?
 - After this step the game should have sound and load cleanly from the
   fat jar.
@@ -239,10 +276,10 @@ Tasks (reference — all done):
 - `./gradlew clean build` is clean.
 - Run the game end-to-end: launcher → menu → level → shoot enemies →
   death/ending → ESC exits cleanly. Audio plays. No GL errors.
-  - **macOS prerequisite:** the 1.5 threading fix (loop on main thread)
-    must be done first, otherwise GLFW aborts on Cocoa. On Linux/Windows
-    the current worker-thread model happens to work, so 1.4's render
-    changes can be verified there even before 1.5.
+  - **macOS (Apple Silicon) verified through 1.5:** the game window
+    opens, the 3.3-core/4.1-Metal context is current, all 1.4 shaders
+    compile/link, and the loop runs with zero GL errors. Full
+    end-to-end (audio + gameplay) still pending 1.6.
 - `./gradlew shadowJar` produces a fat jar that runs standalone with
   natives extracted (verify on a clean machine / fresh JDK 21). Note:
   the fat jar currently does not extract/locate LWJGL natives when
@@ -278,27 +315,22 @@ Tasks (reference — all done):
   (LWJGL 3 still ships `org.lwjgl.BufferUtils` as legacy compat, so it
   compiles). Replace with `MemoryStack`/`MemoryUtil` in 1.6.
 - `Texture.java` uses `java.awt.image.BufferedImage`/`ImageIO` for PNG
-  decode — replaced by STB in 1.6.
-- Audio is a **no-op stub** in 1.3; the game runs silent until 1.6.
+  decode — the *path* (classpath) is fixed in 1.5; the *decoder* (AWT →
+  STB) remains for 1.6.
+- Audio is a **no-op stub**; the game runs silent until 1.6.
   `Sound.java` assigns `NoOpAudio` instances to all 15 static fields.
-- Shaders were `#version 120` with GL 2.1 draw calls — **fixed in 1.4**.
-  All 22 shaders are now `#version 330 core`; VAOs are active;
-  `ShaderUtils` validates link status. The game should render correctly
-  on a 3.3 core context once the macOS threading prerequisite (below) is
-  resolved or verification is done on Linux/Windows.
-- **macOS threading landmine (new, surfaced during 1.4 verification):**
-  `Game.start()` (`Game.java:56-60`) wraps the loop in
-  `new Thread(this, "BlitzRemake").start()`, so all GLFW/GL calls run on
-  a worker thread. Cocoa requires GLFW on the process main thread, so on
-  Apple Silicon the JVM aborts with SIG 133 (`-XstartOnFirstThread` +
-  `-Dorg.lwjgl.glfw.checkThread0=false` do not help — Cocoa itself
-  rejects it). Linux/Windows tolerate off-main GLFW. Fix is scheduled
-  for 1.5: run the loop on the calling thread. Until then, runtime
-  verification of rendering must happen on Linux/Windows.
-- `build.gradle.kts` native classifier now handles Apple Silicon
-  (`natives-macos-arm64` vs `natives-macos`) — fixed in 1.4. The 1.2
-  config only selected `natives-macos` (x64), which meant no LWJGL
-  native could load at all on M-series Macs.
+- Shaders were `#version 120` with GL 2.1 draw calls — **fixed in 1.4**
+  and **runtime-verified in 1.5** on macOS (4.1 Metal core context, no
+  GL errors).
+- **macOS threading landmine — RESOLVED in 1.5.** The game loop now
+  runs on the process main thread (the `Thread` wrapper was removed);
+  GLFW is Cocoa-safe. `-XstartOnFirstThread` is kept in
+  `applicationDefaultJvmArgs` (still required by macOS).
+- `build.gradle.kts` native classifier handles Apple Silicon
+  (`natives-macos-arm64` vs `natives-macos`) — fixed in 1.4.
+- `config.json` is written to CWD by `Util.saveConfig`; the file is not
+  shipped in resources (defaults are used when absent). Moving it to
+  `~/.blitz/` or classpath is a 1.6 cleanup.
 - The `dev` branch history was rewritten (author rewrite to Horbee).
   If `dev` was previously pushed to a remote, the next push needs
   `--force-with-lease`.
@@ -318,24 +350,27 @@ Tasks (reference — all done):
 | `src/main/java/com/honor/blitzremake/graphics/Shader.java` | GLSL program wrapper (uses `glUniformMatrix4fv`) |
 | `src/main/java/com/honor/blitzremake/graphics/VertexArray.java` | VAO-backed mesh (VAOs activated in 1.4); `bind`=`glBindVertexArray` |
 | `src/main/java/com/honor/blitzremake/graphics/ShaderUtils.java` | GLSL program loader (link-status check + throw-on-failure added in 1.4) |
-| `src/main/java/com/honor/blitzremake/graphics/Texture.java` | Needs STB PNG decode in 1.6 |
+| `src/main/java/com/honor/blitzremake/graphics/Texture.java` | Classpath PNG load (1.5); STB decode still TODO 1.6 |
 | `src/main/java/com/honor/blitzremake/input/Input.java` | GLFW-callback-fed static facade + `Input.Mouse` shim |
 | `src/main/java/com/honor/blitzremake/util/MyDisplay.java` | Thin wrapper over `Window.init` |
-| `src/main/java/com/honor/blitzremake/util/Util.java` | `setBlankCursor` → `Window.hideCursor` |
+| `src/main/java/com/honor/blitzremake/util/Util.java` | `setBlankCursor` + Gson `loadConfig`/`saveConfig` (1.5) |
+| `src/main/java/com/honor/blitzremake/util/Config.java` | `record Config(boolean windowed, int width, int height)` (new 1.5) |
+| `src/main/java/com/honor/blitzremake/util/FileUtils.java` | Classpath shader loader (1.5) |
 | `src/main/java/com/honor/blitzremake/sound/Audio.java` | Audio interface |
 | `src/main/java/com/honor/blitzremake/sound/NoOpAudio.java` | No-op stub (replaced in 1.6) |
 | `src/main/java/com/honor/blitzremake/sound/Sound.java` | 15 static fields, currently all `NoOpAudio` |
-| `src/main/java/com/honor/blitzremake/font/Font.java` | Glyph atlas; resource path fix in 1.6 |
-| `src/main/java/com/honor/launcher/Launcher.java` | Swing UI + `glfwGetVideoModes`; full rewrite in 1.5 |
-| `src/main/resources/shaders/` | 22 `.vs`/`.fs` files, rewritten to `#version 330 core` in 1.4 |
+| `src/main/java/com/honor/blitzremake/font/Font.java` | Glyph atlas; resource path fixed in 1.5 |
+| `src/main/java/com/honor/launcher/Launcher.java` | GLFW immediate-mode UI (rewritten 1.5); returns `Config` |
+| `src/main/resources/shaders/` | 22 `.vs`/`.fs` files, `#version 330 core` (1.4) |
 
 ---
 
 ## 9. Current commit graph (dev branch)
 
 ```
-(1.4 uncommitted — working tree)   ← OpenGL 2.1 → 3.3 core
-0a78a35 Port platform layer to GLFW + LWJGL 3 OpenAL   ← HEAD of dev
+(1.5 uncommitted — working tree)   ← GLFW launcher + JSON config + threading fix
+41bd5d2 Port GL 2.1 → 3.3 core (shaders, VAOs, link validation)   ← 1.4
+0a78a35 Port platform layer to GLFW + LWJGL 3 OpenAL
 441753b build: add Gradle (Kotlin DSL) + LWJGL 3 + JOML toolchain
 5ea7435 Restructure: flatten BlitzFinished/ to repo root (Gradle layout)
 3a14f69 chore: normalize line endings via .gitattributes
@@ -351,10 +386,10 @@ All commits authored by `Horbee <n.horox@gmail.com>`.
 
 ## 10. Open questions for the user
 
-1. **JSON config parser in 1.5** — add Gson as a dependency, or hand-roll
-   a minimal parser to keep deps lean?
-2. **Font in 1.6** — keep the existing AWT glyph atlas (just fix resource
-   loading) or switch to STB-truetype for a fully AWT-free stack?
+1. ~~**JSON config parser in 1.5**~~ — **RESOLVED: Gson** (user decision,
+   1.5). `com.google.code.gson:gson:2.11.0` added.
+2. **Font in 1.6** — keep the existing AWT glyph atlas (resource path
+   already fixed in 1.5) or switch to STB-truetype for a fully AWT-free
+   stack? **Ask the user before starting 1.6.**
 
-These are flagged inline in sections 5.1.5 and 5.1.6 as well. Ask the
-user before starting those sub-steps.
+This is flagged inline in section 5.1.6 as well.

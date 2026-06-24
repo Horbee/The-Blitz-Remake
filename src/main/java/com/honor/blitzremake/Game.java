@@ -29,10 +29,11 @@ import com.honor.blitzremake.math.Matrix4f;
 import com.honor.blitzremake.menu.Ending;
 import com.honor.blitzremake.menu.Menu;
 import com.honor.blitzremake.sound.Sound;
+import com.honor.blitzremake.util.Config;
 import com.honor.blitzremake.util.MyDisplay;
 import com.honor.blitzremake.util.Util;
 
-public class Game implements Runnable {
+public class Game {
 
 	public static final int WIDTH = 900;
 	public static final int HEIGHT = WIDTH / 16 * 9;
@@ -40,7 +41,7 @@ public class Game implements Runnable {
 	public static Random rnd = new Random();
 	public static float time;
 
-	private Thread thread;
+	private final Config config;
 	private boolean running = false;
 	private Menu menu;
 	private Level level;
@@ -50,13 +51,22 @@ public class Game implements Runnable {
 	private long alContextHandle;
 
 	public static void main(String[] args) {
-		new Game().start();
+		Window.initGLFW();
+		try {
+			com.honor.launcher.Launcher launcher = new com.honor.launcher.Launcher();
+			Config cfg = launcher.run();
+			launcher.destroy();
+			if (cfg != null) {
+				Util.saveConfig(cfg);
+				new Game(cfg).run();
+			}
+		} finally {
+			Window.terminateGLFW();
+		}
 	}
 
-	public void start() {
-		running = true;
-		thread = new Thread(this, "BlitzRemake");
-		thread.start();
+	public Game(Config config) {
+		this.config = config;
 	}
 
 	private void initGL() {
@@ -162,13 +172,11 @@ public class Game implements Runnable {
 	}
 
 	public void run() {
-		int windowed = Util.getProperty("Windowed");
-		int w = Util.getProperty("Width");
-		int h = Util.getProperty("Height");
-		if (windowed == 1)
+		running = true;
+		if (config.windowed())
 			MyDisplay.set();
 		else
-			MyDisplay.setDisplayMode(w, h, true);
+			MyDisplay.setDisplayMode(config.width(), config.height(), true);
 
 		Util.setBlankCursor();
 		initGL();

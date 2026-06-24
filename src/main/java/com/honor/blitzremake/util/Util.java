@@ -1,25 +1,17 @@
 package com.honor.blitzremake.util;
 
-import java.io.File;
 import java.io.IOException;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerConfigurationException;
-import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.xml.sax.InputSource;
-import org.xml.sax.SAXException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.honor.blitzremake.graphics.Window;
 
 public class Util {
+
+	private static final Path CONFIG_PATH = Path.of("config.json");
+	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
 	public static float Clamp(float value, float min, float max) {
 		if (value > max)
@@ -46,78 +38,40 @@ public class Util {
 		Window.hideCursor();
 	}
 
-	public static void writeXml(int windowedIN, int widthIN, int heightIN) {
-		try {
-
-			DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
-			DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
-
-			// root elements
-			Document doc = docBuilder.newDocument();
-			Element rootElement = doc.createElement("Properties");
-			doc.appendChild(rootElement);
-
-			// staff elements
-			Element windowed = doc.createElement("Windowed");
-			windowed.appendChild(doc.createTextNode(Integer.toString(windowedIN)));
-			rootElement.appendChild(windowed);
-
-			Element resolution = doc.createElement("Resolution");
-			rootElement.appendChild(resolution);
-
-			// firstname elements
-			Element width = doc.createElement("Width");
-			width.appendChild(doc.createTextNode(Integer.toString(widthIN)));
-			resolution.appendChild(width);
-
-			// lastname elements
-			Element height = doc.createElement("Height");
-			height.appendChild(doc.createTextNode(Integer.toString(heightIN)));
-			resolution.appendChild(height);
-
-			// write the content into xml file
-			TransformerFactory transformerFactory = TransformerFactory.newInstance();
-			Transformer transformer = transformerFactory.newTransformer();
-			DOMSource source = new DOMSource(doc);
-			StreamResult result = new StreamResult(new File("Config.xml"));
-
-			// Output to console for testing
-			// StreamResult result = new StreamResult(System.out);
-
-			transformer.transform(source, result);
-
-			System.out.println("File saved!");
-
-		} catch (ParserConfigurationException pce) {
-			pce.printStackTrace();
-		} catch (TransformerException tfe) {
-			tfe.printStackTrace();
+	/**
+	 * Loads the persisted game settings from {@code config.json}. Falls back
+	 * to {@link Config#defaults()} (and logs) when the file is missing or
+	 * unreadable, so a fresh install launches without error.
+	 */
+	public static Config loadConfig() {
+		if (!Files.exists(CONFIG_PATH)) {
+			System.out.println("config.json not found; using defaults.");
+			return Config.defaults();
 		}
-
+		try {
+			String json = Files.readString(CONFIG_PATH);
+			Config cfg = GSON.fromJson(json, Config.class);
+			if (cfg == null) {
+				return Config.defaults();
+			}
+			return cfg;
+		} catch (IOException e) {
+			System.err.println("Could not read config.json; using defaults.");
+			e.printStackTrace();
+			return Config.defaults();
+		}
 	}
 
-	private static Document getDocument(String path) {
+	/**
+	 * Persists the given settings to {@code config.json} (pretty-printed).
+	 */
+	public static void saveConfig(Config config) {
 		try {
-			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-			factory.setIgnoringComments(true);
-			factory.setIgnoringElementContentWhitespace(true);
-			// factory.setValidating(true);
-			DocumentBuilder builder = factory.newDocumentBuilder();
-			// Document doc = builder.parse(new File(Util.class.getResource(path).toURI()));
-			Document doc = builder.parse(new InputSource(path));
-			return doc;
-		} catch (SAXException | IOException | ParserConfigurationException e) {
-			System.err.println("XML file not found!");
+			Files.writeString(CONFIG_PATH, GSON.toJson(config));
+		} catch (IOException e) {
+			System.err.println("Could not write config.json.");
 			e.printStackTrace();
 		}
-
-		return null;
-	}
-
-	public static int getProperty(String string) {
-		Document doc = getDocument("Config.xml");
-		String result = doc.getElementsByTagName(string).item(0).getTextContent();
-		return Integer.parseInt(result);
 	}
 
 }
